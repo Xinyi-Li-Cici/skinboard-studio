@@ -1,95 +1,116 @@
-import React, { useState } from "react";
-import { Canvas } from "@react-three/fiber";
-import { OrbitControls } from "@react-three/drei";
 
-export default function SkinBoardDesigner() {
-  const [modules, setModules] = useState([]);
-  const [traceWidth, setTraceWidth] = useState(2);
-  const [draggingId, setDraggingId] = useState(null);
+import React, { useState, useRef, useEffect } from "react";
 
-  const addModule = (type) => {
-    setModules([
-      ...modules,
-      {
-        type,
-        x: Math.random() * 2 - 1,
-        y: Math.random() * 2 - 1,
-        id: Date.now() + Math.random(),
-      },
-    ]);
+function App() {
+  const [modules, setModules] = useState([
+    { id: "emg1", type: "emg", x: 100, y: 150 },
+    { id: "esp1", type: "esp32", x: 300, y: 150 },
+    { id: "led1", type: "led", x: 500, y: 150 }
+  ]);
+
+  const [connections] = useState([
+    { from: "emg1", to: "esp1" },
+    { from: "esp1", to: "led1" }
+  ]);
+
+  const dragTarget = useRef(null);
+  const offset = useRef({ x: 0, y: 0 });
+
+  const handleMouseDown = (e, id) => {
+    dragTarget.current = id;
+    const mod = modules.find((m) => m.id === id);
+    offset.current = {
+      x: e.clientX - mod.x,
+      y: e.clientY - mod.y
+    };
   };
 
-  const handleDragStart = (id) => {
-    setDraggingId(id);
-  };
-
-  const handleDrag = (e) => {
-    if (draggingId === null) return;
-    const bounds = e.target.getBoundingClientRect();
-    const x = ((e.clientX - bounds.left) / bounds.width) * 4 - 2;
-    const y = -(((e.clientY - bounds.top) / bounds.height) * 4 - 2);
-    setModules((mods) =>
-      mods.map((m) => (m.id === draggingId ? { ...m, x, y } : m))
+  const handleMouseMove = (e) => {
+    if (!dragTarget.current) return;
+    setModules((prev) =>
+      prev.map((m) =>
+        m.id === dragTarget.current
+          ? { ...m, x: e.clientX - offset.current.x, y: e.clientY - offset.current.y }
+          : m
+      )
     );
   };
 
-  const handleDragEnd = () => {
-    setDraggingId(null);
+  const handleMouseUp = () => {
+    dragTarget.current = null;
   };
 
+  useEffect(() => {
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, []);
+
   return (
-    <div className="flex h-screen w-full">
+    <div style={{ fontFamily: "Arial", padding: 20 }}>
+      <h1>SkinBoard Studio v6.1</h1>
       <div
-        className="flex-1 bg-gray-100"
-        onMouseMove={handleDrag}
-        onMouseUp={handleDragEnd}
+        style={{
+          position: "relative",
+          width: "100%",
+          height: "500px",
+          background: "#f4f4f4",
+          border: "1px solid #ccc"
+        }}
       >
-        <Canvas camera={{ position: [0, 0, 5] }}>
-          <ambientLight intensity={0.5} />
-          <OrbitControls />
-          {modules.map((mod) => (
-            <mesh
-              key={mod.id}
-              position={[mod.x, mod.y, 0]}
-              onPointerDown={() => handleDragStart(mod.id)}
-            >
-              <boxGeometry args={[0.4, 0.4, 0.1]} />
-              <meshStandardMaterial color="orange" />
-            </mesh>
-          ))}
-        </Canvas>
-      </div>
-
-      <div className="w-96 p-4 bg-white border-l border-gray-300 space-y-4 overflow-y-auto">
-        <div className="space-y-2 p-4">
-          <h2 className="font-semibold">添加模块</h2>
-          <div className="flex flex-wrap gap-2">
-            <button onClick={() => addModule("EMG")}>EMG</button>
-            <button onClick={() => addModule("HR")}>心率</button>
-            <button onClick={() => addModule("Temp")}>温度</button>
-            <button onClick={() => addModule("MPU")}>IMU</button>
+        <svg
+          style={{
+            position: "absolute",
+            width: "100%",
+            height: "100%",
+            zIndex: 0
+          }}
+        >
+          {connections.map((conn, index) => {
+            const from = modules.find((m) => m.id === conn.from);
+            const to = modules.find((m) => m.id === conn.to);
+            if (!from || !to) return null;
+            return (
+              <line
+                key={index}
+                x1={from.x + 50}
+                y1={from.y + 25}
+                x2={to.x + 50}
+                y2={to.y + 25}
+                stroke="black"
+                strokeWidth={2}
+              />
+            );
+          })}
+        </svg>
+        {modules.map((mod) => (
+          <div
+            key={mod.id}
+            onMouseDown={(e) => handleMouseDown(e, mod.id)}
+            style={{
+              position: "absolute",
+              left: mod.x,
+              top: mod.y,
+              width: 100,
+              height: 50,
+              background: "#fff",
+              border: "2px solid #666",
+              borderRadius: 8,
+              textAlign: "center",
+              lineHeight: "50px",
+              cursor: "move",
+              zIndex: 1
+            }}
+          >
+            {mod.type.toUpperCase()}
           </div>
-        </div>
-
-        <div className="space-y-2 p-4">
-          <h2 className="font-semibold">铜线路径宽度</h2>
-          <input
-            type="range"
-            min={1}
-            max={5}
-            step={1}
-            value={traceWidth}
-            onChange={(e) => setTraceWidth(parseInt(e.target.value))}
-          />
-          <p>当前宽度：{traceWidth}px</p>
-        </div>
-
-        <div className="space-y-2 p-4">
-          <h2 className="font-semibold">导出设计</h2>
-          <button className="w-full border px-2 py-1">导出为 JSON</button>
-          <button className="w-full border px-2 py-1">导出为 PNG</button>
-        </div>
+        ))}
       </div>
     </div>
   );
 }
+
+export default App;
